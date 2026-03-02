@@ -7,20 +7,20 @@ import os
 class MatToPandasApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Automatización .mat a Pandas")
-        self.root.geometry("600x500")
+        self.root.title("Procesador de .mat a Excel")
+        self.root.geometry("800x600")
+        self.root.configure(bg="#f0f0f0")
 
-        # Variable para almacenar las rutas de los archivos seleccionados
         self.archivos_seleccionados = []
 
         # --- INTERFAZ GRÁFICA ---
         
-        # Título
-        lbl_titulo = tk.Label(root, text="Procesador de Archivos MATLAB (.mat)", font=("Arial", 14, "bold"))
+        #titulo
+        lbl_titulo = tk.Label(root, text="Análisis de ensayos con cruces", font=("Helvetica", 14, "bold"))
         lbl_titulo.pack(pady=10)
 
         # Botón Seleccionar
-        btn_seleccionar = tk.Button(root, text="Seleccionar Archivos .mat", command=self.seleccionar_archivos, bg="#4CAF50", fg="white", font=("Arial", 11))
+        btn_seleccionar = tk.Button(root, text="Seleccionar Archivos .mat", command=self.seleccionar_archivos, bg="#800607", fg="white", font=("Helvetica", 12, "bold"))
         btn_seleccionar.pack(pady=5)
 
         # Lista para mostrar archivos seleccionados
@@ -28,11 +28,11 @@ class MatToPandasApp:
         self.lista_archivos.pack(pady=10)
 
         # Botón Iniciar
-        btn_procesar = tk.Button(root, text="2. Iniciar Procesamiento", command=self.iniciar_proceso, bg="#2196F3", fg="white", font=("Arial", 12, "bold"))
+        btn_procesar = tk.Button(root, text="Iniciar Procesamiento de Datos", command=self.iniciar_proceso, bg="#800607", fg="white", font=("Helvetica", 12, "bold"))
         btn_procesar.pack(pady=10)
 
         # Área de texto para logs/resultados
-        self.log_area = scrolledtext.ScrolledText(root, width=70, height=8, state='disabled')
+        self.log_area = scrolledtext.ScrolledText(root, width=100, height=10, state='disabled')
         self.log_area.pack(pady=10)
 
     def log(self, mensaje):
@@ -61,16 +61,15 @@ class MatToPandasApp:
     def leer_mat_a_df(self, ruta_archivo):
         """Lógica interna para extraer la matriz del .mat y asignarle las columnas de la imagen"""
         try:
-            # 1. Definimos las columnas basadas en tu imagen
             columnas = [
                 'Ensayo', 'Lado', 'Estim Electrico', 'Latencia', 
                 'Tiempo Absoluto', 'Palancas Izq', 'Palancas Der', 'Desplazamiento'
             ]
             
-            # 2. Cargamos el archivo .mat
+            # Cargamos el archivo .mat
             mat_data = scipy.io.loadmat(ruta_archivo)
             
-            # 3. Extraemos la matriz de datos
+            # Extraemos la matriz de datos
             # Como los .mat guardan metadata (keys que empiezan con '__'), 
             # buscamos la primera variable que contenga nuestra información real.
             matriz_datos = None
@@ -83,7 +82,7 @@ class MatToPandasApp:
                 self.log(f"Error: No se encontraron datos válidos en {os.path.basename(ruta_archivo)}")
                 return None
 
-            # 4. Creamos el DataFrame directamente con la matriz y las columnas
+            # Creamos el DataFrame directamente con la matriz y las columnas
             # Aseguramos que los datos encajen con el número de columnas
             if matriz_datos.shape[1] == len(columnas):
                 df = pd.DataFrame(matriz_datos, columns=columnas)
