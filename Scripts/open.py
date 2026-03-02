@@ -59,25 +59,44 @@ class MatToPandasApp:
             self.log(f"-> Se han cargado {len(archivos)} archivos listos para procesar.")
 
     def leer_mat_a_df(self, ruta_archivo):
-        """Lógica interna para limpiar el .mat y pasarlo a DataFrame"""
+        """Lógica interna para extraer la matriz del .mat y asignarle las columnas de la imagen"""
         try:
-            mat_data = scipy.io.loadmat(ruta_archivo)
-            data_limpia = {}
+            # 1. Definimos las columnas basadas en tu imagen
+            columnas = [
+                'Ensayo', 'Lado', 'Estim Electrico', 'Latencia', 
+                'Tiempo Absoluto', 'Palancas Izq', 'Palancas Der', 'Desplazamiento'
+            ]
             
-            # Filtramos metadata de MATLAB (empiezan con __)
+            # 2. Cargamos el archivo .mat
+            mat_data = scipy.io.loadmat(ruta_archivo)
+            
+            # 3. Extraemos la matriz de datos
+            # Como los .mat guardan metadata (keys que empiezan con '__'), 
+            # buscamos la primera variable que contenga nuestra información real.
+            matriz_datos = None
             for key, value in mat_data.items():
                 if not key.startswith('__'):
-                    # Aplanamos arrays para que entren bien en columnas
-                    if hasattr(value, 'flatten'):
-                        data_limpia[key] = value.flatten()
-                    else:
-                        data_limpia[key] = value
+                    matriz_datos = value
+                    break  # Asumimos que la primera variable sin '__' es tu matriz de datos
+            
+            if matriz_datos is None:
+                self.log(f"Error: No se encontraron datos válidos en {os.path.basename(ruta_archivo)}")
+                return None
 
-            df = pd.DataFrame(data_limpia)
-            df['archivo_origen'] = os.path.basename(ruta_archivo)
-            return df
+            # 4. Creamos el DataFrame directamente con la matriz y las columnas
+            # Aseguramos que los datos encajen con el número de columnas
+            if matriz_datos.shape[1] == len(columnas):
+                df = pd.DataFrame(matriz_datos, columns=columnas)
+                
+                # Opcional pero recomendado: rastrear de qué archivo vino cada fila
+                df['archivo_origen'] = os.path.basename(ruta_archivo)
+                return df
+            else:
+                self.log(f"Error en dimensiones: {os.path.basename(ruta_archivo)} tiene {matriz_datos.shape[1]} columnas, pero esperamos {len(columnas)}.")
+                return None
+                
         except Exception as e:
-            self.log(f"Error en {os.path.basename(ruta_archivo)}: {str(e)}")
+            self.log(f"Error al procesar {os.path.basename(ruta_archivo)}: {str(e)}")
             return None
 
     def iniciar_proceso(self):
