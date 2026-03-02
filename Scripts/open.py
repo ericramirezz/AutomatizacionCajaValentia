@@ -97,38 +97,39 @@ class MatToPandasApp:
         except Exception as e:
             self.log(f"Error al procesar {os.path.basename(ruta_archivo)}: {str(e)}")
             return None
-
+        
     def iniciar_proceso(self):
-        """Ejecuta la automatización"""
+        """Ejecuta la automatización y guarda cada archivo en un DataFrame distinto"""
         if not self.archivos_seleccionados:
             messagebox.showwarning("Atención", "Por favor selecciona archivos primero.")
             return
 
         self.log("--- Iniciando Procesamiento ---")
-        lista_dfs = []
+        
+        # Aquí guardaremos cada DataFrame de forma independiente
+        # Estructura: {'nombre_del_archivo.mat': DataFrame}
+        self.diccionario_dataframes = {}
 
         for ruta in self.archivos_seleccionados:
             df = self.leer_mat_a_df(ruta)
             if df is not None:
-                lista_dfs.append(df)
-                self.log(f"OK: {os.path.basename(ruta)} (Filas: {len(df)})")
+                nombre_archivo = os.path.basename(ruta)
+                # Asignamos el DataFrame al diccionario usando el nombre del archivo
+                self.diccionario_dataframes[nombre_archivo] = df
+                self.log(f"OK: {nombre_archivo} guardado como DataFrame independiente (Filas: {len(df)})")
 
-        if lista_dfs:
-
-            df_final = pd.concat(lista_dfs, ignore_index=True)
+        if self.diccionario_dataframes:
+            self.log(f"--- ÉXITO: Se crearon {len(self.diccionario_dataframes)} DataFrames distintos ---")
             
-            self.log(f"--- ÉXITO: DataFrame Final creado ---")
-            self.log(f"Total Filas: {df_final.shape[0]}, Total Columnas: {df_final.shape[1]}")
+            # Mostramos una vista previa del primer DataFrame procesado como ejemplo
+            primer_archivo = list(self.diccionario_dataframes.keys())[0]
+            resumen = self.diccionario_dataframes[primer_archivo].head().to_string()
+            self.log(f"\nVista previa de: {primer_archivo}\n" + resumen)
             
-            # Ejemplo de operación posterior: Guardar a Excel para verificar
-            # O mostrar las primeras filas en un mensaje
-            resumen = df_final.head().to_string()
-            self.log("Vista previa de los primeros datos:\n" + resumen)
+            messagebox.showinfo("Proceso Terminado", f"Se crearon {len(self.diccionario_dataframes)} DataFrames individuales correctamente.")
             
-            messagebox.showinfo("Proceso Terminado", "Los archivos han sido procesados y unidos correctamente.")
-            
-            # Opcional: Aquí podrías retornar df_final para usarlo en otra parte del código
-            return df_final
+            # Si necesitas que la función devuelva todos los DataFrames para usarlos fuera de la clase:
+            return self.diccionario_dataframes
             
         else:
-            self.log("No se pudieron procesar los DataFrames.")
+            self.log("No se pudieron procesar los archivos.")
