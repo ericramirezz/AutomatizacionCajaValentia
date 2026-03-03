@@ -43,7 +43,7 @@ class MatToPandasApp:
         self.log_area.configure(state='disabled')
 
     def seleccionar_archivos(self):
-        """Abre el explorador de archivos para selección múltiple"""
+        #para abrir explorador de archivos y seleccionar los .mat
         archivos = filedialog.askopenfilenames(
             title="Seleccionar archivos .mat",
             filetypes=[("Archivos MATLAB", "*.mat")]
@@ -59,14 +59,14 @@ class MatToPandasApp:
             self.log(f"-> Se han cargado {len(archivos)} archivos listos para procesar.")
 
     def leer_mat_a_df(self, ruta_archivo):
-        """Lógica interna para extraer la matriz del .mat y asignarle las columnas de la imagen"""
+        #extracción de la matriz del .mat y asignarle las columnas correspondeintes al Df
         try:
             columnas = [
                 'Ensayo', 'Lado', 'Estim Electrico', 'Latencia', 
                 'Tiempo Absoluto', 'Palancas Izq', 'Palancas Der', 'Desplazamiento'
             ]
             
-            # Cargamos el archivo .mat
+            # cargamos el archivo .mat
             mat_data = scipy.io.loadmat(ruta_archivo)
             
             # Extraemos la matriz de datos
@@ -99,7 +99,7 @@ class MatToPandasApp:
             return None
         
     def iniciar_proceso(self):
-        """Ejecuta la automatización y guarda cada archivo en un DataFrame distinto"""
+        #guardamos  cada df con el nombre del archivo para luego iniciar el proceso de análisis
         if not self.archivos_seleccionados:
             messagebox.showwarning("Atención", "Por favor selecciona archivos primero.")
             return
@@ -108,28 +108,28 @@ class MatToPandasApp:
         
         # Aquí guardaremos cada DataFrame de forma independiente
         # Estructura: {'nombre_del_archivo.mat': DataFrame}
-        self.diccionario_dataframes = {}
+        self.dfs_mat = {}
 
         for ruta in self.archivos_seleccionados:
             df = self.leer_mat_a_df(ruta)
             if df is not None:
                 nombre_archivo = os.path.basename(ruta)
-                # Asignamos el DataFrame al diccionario usando el nombre del archivo
-                self.diccionario_dataframes[nombre_archivo] = df
-                self.log(f"OK: {nombre_archivo} guardado como DataFrame independiente (Filas: {len(df)})")
+                # asignamos el df al diccionario usando el nombre del archivo
+                self.dfs_mat[nombre_archivo] = df
+                self.log(f"OK: {nombre_archivo} guardado (Filas: {len(df)})")
 
-        if self.diccionario_dataframes:
-            self.log(f"--- ÉXITO: Se crearon {len(self.diccionario_dataframes)} DataFrames distintos ---")
+        if self.dfs_mat:
+            self.log(f"Se cargaron {len(self.dfs_mat)} DataFrames distintos ---")
             
             # Mostramos una vista previa del primer DataFrame procesado como ejemplo
-            primer_archivo = list(self.diccionario_dataframes.keys())[0]
-            resumen = self.diccionario_dataframes[primer_archivo].head().to_string()
+            primer_archivo = list(self.dfs_mat.keys())[0]
+            resumen = self.dfs_mat[primer_archivo].head().to_string()
             self.log(f"\nVista previa de: {primer_archivo}\n" + resumen)
             
-            messagebox.showinfo("Proceso Terminado", f"Se crearon {len(self.diccionario_dataframes)} DataFrames individuales correctamente.")
+            messagebox.showinfo("Proceso Terminado", f"Se crearon {len(self.dfs_mat)} DataFrames individuales correctamente.")
             
-            # Si necesitas que la función devuelva todos los DataFrames para usarlos fuera de la clase:
-            return self.diccionario_dataframes
+            #devulve todos los dataframes por separado para iniciar el proceso de análisis
+            return self.dfs_mat
             
         else:
             self.log("No se pudieron procesar los archivos.")
