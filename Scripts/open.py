@@ -4,10 +4,10 @@ from tkinter import ttk
 from tkinter import scrolledtext
 import pandas as pd
 import scipy.io
+import openpyxl
 import os
 
-
-class MatToPandasApp:
+class caja_valentia_app:
     def __init__(self, root):
         self.root = root
         self.root.title("Procesador de .mat a Excel")
@@ -50,14 +50,27 @@ class MatToPandasApp:
         )
         lbl_titulo.pack(pady=10)
 
-        # Botón seleccionar
-        btn_seleccionar = ttk.Button(
-            main_frame,
+        # Frame para los botones de selección
+        buttons_selection_frame = ttk.Frame(main_frame)
+        buttons_selection_frame.pack(pady=5, fill="x")
+
+        # Botón seleccionar .mats (izquierda)
+        btn_seleccionar_mat = ttk.Button(
+            buttons_selection_frame,
             text="Seleccionar Archivos .mat",
             command=self.seleccionar_archivos,
             style="Red.TButton"
         )
-        btn_seleccionar.pack(pady=5)
+        btn_seleccionar_mat.pack(side="left", padx=80)
+        
+        # Botón seleccionar excel (derecha)
+        btn_seleccionar_xlsx = ttk.Button(
+            buttons_selection_frame,
+            text="Seleccionar Archivos .xlsx",
+            command=self.seleccionar_archivos,
+            style="Red.TButton"
+        )
+        btn_seleccionar_xlsx.pack(side="right", padx=80)
 
         # Lista de archivos
         self.lista_archivos = tk.Listbox(
@@ -68,14 +81,27 @@ class MatToPandasApp:
         )
         self.lista_archivos.pack(pady=10)
 
-        # Botón procesar
+        # Frame para los botones de procesamiento
+        buttons_process_frame = ttk.Frame(main_frame)
+        buttons_process_frame.pack(pady=5, fill="x")
+
+        # Botón procesar .mat (izquierda)
         btn_procesar = ttk.Button(
-            main_frame,
-            text="Iniciar Procesamiento de Datos",
+            buttons_process_frame,
+            text="Iniciar Procesamiento de .mat (misma rata)",
             command=self.iniciar_proceso,
             style="Red.TButton"
         )
-        btn_procesar.pack(pady=10)
+        btn_procesar.pack(side="left", padx=20)
+
+        # Botón procesar .xlsx (derecha)
+        btn_procesar_xlsx = ttk.Button(
+            buttons_process_frame,
+            text="Procesar Archivos .xlsx (diferentes ratas)",
+            command=self.procesar_xlsx,
+            style="Red.TButton"
+        )
+        btn_procesar_xlsx.pack(side="right", padx=0)
 
         # Área de logs
         self.log_area = scrolledtext.ScrolledText(
@@ -89,12 +115,17 @@ class MatToPandasApp:
     # ---------- FUNCIONES ----------
 
     def log(self, mensaje):
+        """Muestra mensajes en la consola de la interfaz gráfica."""
         self.log_area.configure(state='normal')
         self.log_area.insert(tk.END, mensaje + "\n")
         self.log_area.see(tk.END)
         self.log_area.configure(state='disabled')
 
+    def procesar_xlsx(self):
+        pass  
+
     def seleccionar_archivos(self):
+        """Abre el explorador para seleccionar múltiples archivos .mat."""
         archivos = filedialog.askopenfilenames(
             title="Seleccionar archivos .mat",
             filetypes=[("Archivos MATLAB", "*.mat")]
@@ -111,6 +142,7 @@ class MatToPandasApp:
             self.log(f"-> Se han cargado {len(archivos)} archivos listos para procesar.")
 
     def leer_mat_a_df(self, ruta_archivo):
+        """Convierte un archivo .mat específico a un DataFrame de Pandas."""
         try:
             columnas = [
                 'Ensayo', 'Lado', 'Estim Electrico', 'Latencia',
@@ -132,6 +164,7 @@ class MatToPandasApp:
 
             if matriz_datos.shape[1] == len(columnas):
                 df = pd.DataFrame(matriz_datos, columns=columnas)
+                # Opcional: dejamos el archivo origen por si se requiere rastrear
                 df['archivo_origen'] = os.path.basename(ruta_archivo)
                 return df
             else:
@@ -146,32 +179,89 @@ class MatToPandasApp:
             self.log(f"Error al procesar {os.path.basename(ruta_archivo)}: {str(e)}")
             return None
 
+    def eliminar_lados_consecutivos(self, df):
+        """
+        Elimina filas consecutivas duplicadas en la columna 'Lado'.
+        Mantiene solo la primera fila de cada grupo de valores consecutivos iguales.
+        """
+        if 'Lado' not in df.columns:
+            return df
+        
+        # Detectar cambios en la columna 'Lado'
+        cambios = df['Lado'].ne(df['Lado'].shift()).cumsum()
+        
+        # Mantener solo la primera fila de cada grupo
+        df_filtrado = df.groupby(cambios).first().reset_index(drop=True)
+        
+        return df_filtrado
+
+    def modificar_dataframe(self, df):
+        df = df.drop(['Ensayo', 'Tiempo Absoluto' ,'Palancas Izq', 'Palancas Der', 'archivo_origen'], axis=1)  # Elimina columnas que no se necesitan para el análisis de cruces
+        df = df[df['Desplazamiento'] > 1]  # Cuando el desplazamiento es menor a 1, se interpreta que la rata no cruzó 
+        
+        # Eliminar filas consecutivas duplicadas en 'Lado' para cuando el estimulo es del mismo lado.
+        df = self.eliminar_lados_consecutivos(df)
+        
+        return df
+
     def iniciar_proceso(self):
+        """Ejecuta la lectura, modificación y exportación a un solo Excel."""
         if not self.archivos_seleccionados:
             messagebox.showwarning("Atención", "Por favor selecciona archivos primero.")
             return
 
-        self.log("--- Iniciando Procesamiento ---")
-
         self.dfs_mat = {}
 
+        # 1. Leer y modificar cada archivo
         for ruta in self.archivos_seleccionados:
             df = self.leer_mat_a_df(ruta)
+            
             if df is not None:
+                # AQUÍ LLAMAMOS A LA FUNCIÓN MODIFICADORA
+                df_modificado = self.modificar_dataframe(df)
+                
                 nombre_archivo = os.path.basename(ruta)
-                self.dfs_mat[nombre_archivo] = df
-                self.log(f"OK: {nombre_archivo} guardado (Filas: {len(df)})")
+                self.dfs_mat[nombre_archivo] = df_modificado
+                self.log(f"OK: {nombre_archivo} procesado (Filas finales: {len(df_modificado)})")
 
-        if self.dfs_mat:
-            self.log(f"Se cargaron {len(self.dfs_mat)} DataFrames distintos ---")
+        if not self.dfs_mat:
+            self.log("No se pudieron procesar los archivos.")
+            return
 
-            primer_archivo = list(self.dfs_mat.keys())[0]
-            resumen = self.dfs_mat[primer_archivo].head().to_string()
-            self.log(f"\nVista previa de: {primer_archivo}\n" + resumen)
+        # 2. Guardar en un solo Excel con múltiples hojas
+        self.log(f"Se generaron {len(self.dfs_mat)} DataFrames. Preparando exportación...")
+        
+        # Pedir al usuario dónde guardar el archivo Excel
+        ruta_guardado = filedialog.asksaveasfilename(
+            title="Guardar datos procesados en Excel",
+            defaultextension=".xlsx",
+            filetypes=[("Archivo de Excel", "*.xlsx")],
+            initialfile="Resultados_Ensayos.xlsx"
+        )
 
+        if not ruta_guardado:
+            self.log("Exportación cancelada por el usuario.")
+            return
+
+        try:
+            # Usar pd.ExcelWriter para poder crear múltiples hojas
+            with pd.ExcelWriter(ruta_guardado, engine='openpyxl') as writer:
+                for nombre_archivo, df_final in self.dfs_mat.items():
+                    
+                    # Excel tiene un límite de 31 caracteres para el nombre de las hojas
+                    # Limpiamos la extensión .mat y recortamos si es necesario
+                    nombre_hoja = nombre_archivo.replace('.mat', '')[:31]
+                    
+                    # Guardamos el DataFrame en su propia hoja, sin incluir el índice (0,1,2...)
+                    df_final.to_excel(writer, sheet_name=nombre_hoja, index=False)
+            
+            self.log(f"Archivo guardado en {ruta_guardado}")
             messagebox.showinfo(
                 "Proceso Terminado",
-                f"Se crearon {len(self.dfs_mat)} DataFrames individuales correctamente."
+                f"Se procesaron {len(self.dfs_mat)} archivos y se guardaron correctamente en el Excel."
             )
-        else:
-            self.log("No se pudieron procesar los archivos.")
+
+        except Exception as e:
+            self.log(f"Error crítico al intentar guardar el Excel: {str(e)}")
+            messagebox.showerror("Error", "No se pudo guardar el archivo Excel. Revisa los logs.")
+

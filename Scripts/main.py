@@ -9,5 +9,5 @@ if __name__ == "__main__":
     style = ttk.Style()
     style.theme_use("clam")
 
-    app = open.MatToPandasApp(root)
+    app = open.caja_valentia_app(root)
     root.mainloop()
