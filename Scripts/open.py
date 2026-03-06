@@ -33,7 +33,7 @@ class caja_valentia_app:
 
         style.map(
             "Red.TButton",
-            background=[("active", "#a10b0c")]
+            background=[("active", "#a10b0c")] #no megusto el color
         )
 
         # ---------- INTERFAZ ----------
