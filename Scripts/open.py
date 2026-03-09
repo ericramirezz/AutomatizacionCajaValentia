@@ -6,12 +6,16 @@ import pandas as pd
 import scipy.io
 import openpyxl
 import os
+from openpyxl.styles import Font
+from openpyxl.utils import get_column_letter
 
 class caja_valentia_app:
     def __init__(self, root):
         self.root = root
         self.root.title("Procesador de .mat a Excel")
         self.root.geometry("800x600")
+        self.root.bind("<Escape>", lambda e: self.root.destroy())
+
 
         self.archivos_seleccionados = []
 
@@ -88,7 +92,7 @@ class caja_valentia_app:
         # Botón procesar .mat (izquierda)
         btn_procesar = ttk.Button(
             buttons_process_frame,
-            text="Iniciar Procesamiento de .mat (misma rata)",
+            text="Iniciar Procesamiento de .mat (misma día, diferentes ratas)",
             command=self.iniciar_proceso,
             style="Red.TButton"
         )
@@ -97,7 +101,7 @@ class caja_valentia_app:
         # Botón procesar .xlsx (derecha)
         btn_procesar_xlsx = ttk.Button(
             buttons_process_frame,
-            text="Procesar Archivos .xlsx (diferentes ratas)",
+            text="Graficar .xlsx (diferentes días)",
             command=self.procesar_xlsx,
             style="Red.TButton"
         )
@@ -111,6 +115,14 @@ class caja_valentia_app:
             state='disabled'
         )
         self.log_area.pack(pady=10)
+        
+        lbl_esc = ttk.Label(
+            self.root,
+            text="Presiona ESC para cerrar el programa",
+            font=("Arial", 8),
+            foreground="black"
+            )
+        lbl_esc.place(x=10, rely=1.0, anchor="sw", y=-5)
 
     # ---------- FUNCIONES ----------
 
@@ -196,14 +208,36 @@ class caja_valentia_app:
         return df_filtrado
 
     def modificar_dataframe(self, df):
-        df = df.drop(['Ensayo', 'Tiempo Absoluto' ,'Palancas Izq', 'Palancas Der', 'archivo_origen'], axis=1)  # Elimina columnas que no se necesitan para el análisis de cruces
+        df = df.drop(['Tiempo Absoluto' ,'Palancas Izq', 'Palancas Der', 'archivo_origen'], axis=1)  # Elimina columnas que no se necesitan para el análisis de cruces
         df = df[df['Desplazamiento'] > 1]  # Cuando el desplazamiento es menor a 1, se interpreta que la rata no cruzó 
-        
         # Eliminar filas consecutivas duplicadas en 'Lado' para cuando el estimulo es del mismo lado.
         df = self.eliminar_lados_consecutivos(df)
+        df['Ensayo'] = range(1, len(df) + 1)  # Agregar columna de número de ensayo (cruce) al inicio
         
         return df
 
+    def calcular_promedios_latencia(self, dfs_dict):
+            """
+            Calcula el promedio de Latencia para Estim Electrico == 1 y == 0
+            por cada archivo procesado. Retorna un DataFrame resumen.
+            """
+            filas = []
+            for nombre_archivo, df in dfs_dict.items():
+                if 'Latencia' not in df.columns or 'Estim Electrico' not in df.columns:
+                    self.log(f"Advertencia: {nombre_archivo} no tiene columnas Latencia/Estim Electrico.")
+                    continue
+
+                promedio_con = df.loc[df['Estim Electrico'] == 1, 'Latencia'].mean()
+                promedio_sin = df.loc[df['Estim Electrico'] == 0, 'Latencia'].mean()
+
+                filas.append({
+                    'Nombre de archivo': nombre_archivo,
+                    'Promedio Seguro': round(promedio_sin, 1) if pd.notna(promedio_sin) else 0,
+                    'Promedio Riesgo': round(promedio_con, 1) if pd.notna(promedio_con) else 0,
+                })
+
+            return pd.DataFrame(filas)
+    
     def iniciar_proceso(self):
         """Ejecuta la lectura, modificación y exportación a un solo Excel."""
         if not self.archivos_seleccionados:
@@ -222,7 +256,7 @@ class caja_valentia_app:
                 
                 nombre_archivo = os.path.basename(ruta)
                 self.dfs_mat[nombre_archivo] = df_modificado
-                self.log(f"OK: {nombre_archivo} procesado (Filas finales: {len(df_modificado)})")
+                self.log(f"OK: {nombre_archivo} procesado correctamente con {len(df_modificado)} filas finales.")
 
         if not self.dfs_mat:
             self.log("No se pudieron procesar los archivos.")
@@ -246,6 +280,16 @@ class caja_valentia_app:
         try:
             # Usar pd.ExcelWriter para poder crear múltiples hojas
             with pd.ExcelWriter(ruta_guardado, engine='openpyxl') as writer:
+                
+                # Hoja extra con promedios de latencia por archivo
+                df_promedios = self.calcular_promedios_latencia(self.dfs_mat)
+                promedio_riesgo = round(df_promedios['Promedio Riesgo'].mean(), 1)
+                promedio_seguro = round(df_promedios['Promedio Seguro'].mean(), 1)
+                indice_nueva_fila = len(df_promedios) + 2  # Dejar una fila vacía después de los datos
+                df_promedios.loc[indice_nueva_fila, 'Promedio Riesgo'] = promedio_riesgo
+                df_promedios.loc[indice_nueva_fila, 'Promedio Seguro'] = promedio_seguro
+                
+                self.dfs_mat['Promedios Latencia'] = df_promedios  # Agregar el DataFrame de promedios al diccionario para que se guarde como hoja también
                 for nombre_archivo, df_final in self.dfs_mat.items():
                     
                     # Excel tiene un límite de 31 caracteres para el nombre de las hojas
@@ -254,6 +298,29 @@ class caja_valentia_app:
                     
                     # Guardamos el DataFrame en su propia hoja, sin incluir el índice (0,1,2...)
                     df_final.to_excel(writer, sheet_name=nombre_hoja, index=False)
+                    
+                    worksheet = writer.sheets[nombre_hoja]
+                    
+                    for cell in worksheet[1]: # worksheet[1] representa la primera fila
+                        cell.font = Font(bold=True)
+                    
+                    for col_idx, column in enumerate(df_final.columns, start=1):
+                        # Obtenemos la letra de la columna en Excel (A, B, C...)
+                        col_letter = get_column_letter(col_idx)
+                        
+                        # Iniciamos asumiendo que el ancho máximo es el largo del nombre de la columna
+                        max_length = len(str(column))
+                        
+                        # Revisamos celda por celda en esa columna para ver si hay un texto más largo
+                        for cell in worksheet[col_letter]:
+                            try:
+                                if len(str(cell.value)) > max_length:
+                                    max_length = len(str(cell.value))
+                            except:
+                                pass
+                        
+                        # Asignamos el nuevo ancho (le sumamos 2 para que no quede muy apretado)
+                        worksheet.column_dimensions[col_letter].width = max_length + 2    
             
             self.log(f"Archivo guardado en {ruta_guardado}")
             messagebox.showinfo(
