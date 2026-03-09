@@ -8,7 +8,7 @@ import openpyxl
 import os
 from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
-
+import matplotlib.pyplot as plt
 class caja_valentia_app:
     def __init__(self, root):
         self.root = root
@@ -93,7 +93,7 @@ class caja_valentia_app:
         btn_procesar = ttk.Button(
             buttons_process_frame,
             text="Iniciar Procesamiento de .mat (misma día, diferentes ratas)",
-            command=self.iniciar_proceso,
+            command=self.iniciar_proceso_latencias,
             style="Red.TButton"
         )
         btn_procesar.pack(side="left", padx=20)
@@ -131,16 +131,16 @@ class caja_valentia_app:
         self.log_area.configure(state='normal')
         self.log_area.insert(tk.END, mensaje + "\n")
         self.log_area.see(tk.END)
-        self.log_area.configure(state='disabled')
-
-    def procesar_xlsx(self):
-        pass  
+        self.log_area.configure(state='disabled') 
 
     def seleccionar_archivos(self):
-        """Abre el explorador para seleccionar múltiples archivos .mat."""
+        """Abre el explorador para seleccionar múltiples archivos .mat o .xlsx."""
         archivos = filedialog.askopenfilenames(
-            title="Seleccionar archivos .mat",
-            filetypes=[("Archivos MATLAB", "*.mat")]
+            title="Seleccionar archivos",
+            filetypes=[
+                ("Archivos MATLAB", "*.mat"),
+                ("Archivos Excel", "*.xlsx")
+            ]
         )
 
         if archivos:
@@ -238,7 +238,96 @@ class caja_valentia_app:
 
             return pd.DataFrame(filas)
     
-    def iniciar_proceso(self):
+    def procesar_xlsx(self):
+        if not self.archivos_seleccionados:
+            self.log("Operación cancelada. No se seleccionaron archivos.")
+            return
+        
+        # Ordenamos las rutas alfabéticamente para garantizar que el Día 1 al 5 mantengan su orden lógico
+        archivos = sorted(self.archivos_seleccionados, key=lambda x: os.path.basename(x))
+    
+        # Listas para guardar las coordenadas X (Días) y Y (Promedios)
+        dias_seguros = []
+        valores_seguros = []
+        
+        dias_riesgo = []
+        valores_riesgo = []
+        
+        for dia_idx, ruta in enumerate(archivos, start=1):
+            try:
+                # 2. Leer específicamente la última hoja del Excel
+                archivo_excel = pd.ExcelFile(ruta)
+                ultima_hoja = archivo_excel.sheet_names[-1]
+                df = archivo_excel.parse(ultima_hoja)
+                
+                # --- ATENCIÓN AQUÍ ---
+                # Asegúrate de que estos nombres coincidan exactamente con las columnas 
+                # de tu Excel donde guardaste los promedios finales.
+                columna_seguros = 'Promedio Seguro'
+                columna_riesgo = 'Promedio Riesgo'
+                
+                if columna_seguros in df.columns and columna_riesgo in df.columns:
+                    # Extraemos el valor de la última fila (.iloc[-1])
+                    val_seguro = float(df[columna_seguros].iloc[-1])
+                    val_riesgo = float(df[columna_riesgo].iloc[-1])
+                    
+                    # 3. Lógica Condicional de Graficación
+                    if val_seguro != 0 and val_riesgo == 0:
+                        # Caso 1: Solo hay Promedio Seguros
+                        dias_seguros.append(dia_idx)
+                        valores_seguros.append(val_seguro)
+                        
+                    elif val_riesgo != 0 and val_seguro == 0:
+                        # Caso 2: Solo hay Promedio Riesgo
+                        dias_riesgo.append(dia_idx)
+                        valores_riesgo.append(val_riesgo)
+                        
+                    elif val_seguro != 0 and val_riesgo != 0:
+                        # Caso 3: Ambos son distintos de 0 (Hubo estímulo eléctrico)
+                        # Añadimos ambos valores al mismo día
+                        dias_seguros.append(dia_idx)
+                        valores_seguros.append(val_seguro)
+                        
+                        dias_riesgo.append(dia_idx)
+                        valores_riesgo.append(val_riesgo)
+                    else:
+                        print(f"Día {dia_idx}: Ambos valores son 0, se omitirá en la gráfica.")
+                else:
+                    print(f"Error en {os.path.basename(ruta)}: No se encontraron las columnas '{columna_seguros}' o '{columna_riesgo}'.")
+                    
+            except Exception as e:
+                print(f"Error procesando el archivo {os.path.basename(ruta)}: {str(e)}")
+
+        # 4. Configurar y crear la gráfica con Matplotlib
+        plt.figure(figsize=(9, 6)) # Tamaño de la imagen (ancho, alto)
+        
+        # Graficamos los puntos usando scatter (dispersión)
+        if dias_seguros:
+            plt.scatter(dias_seguros, valores_seguros, color='blue', label='Promedio Seguros', s=120, alpha=0.8)
+        if dias_riesgo:
+            plt.scatter(dias_riesgo, valores_riesgo, color='red', label='Promedio Riesgo', s=120, alpha=0.8)
+            
+        # Diseño visual
+        plt.title('Evolución de Promedios de Latencia (5 Días)', fontsize=15, fontweight='bold')
+        plt.xlabel('Día de Prueba', fontsize=12)
+        plt.ylabel('Promedio de Latencia', fontsize=12)
+        
+        # Forzamos que el eje X muestre números enteros (1, 2, 3, 4, 5)
+        plt.xticks(range(1, len(archivos) + 1))
+        
+        # Añadimos una cuadrícula de fondo y la leyenda
+        plt.grid(True, linestyle='--', alpha=0.6)
+        plt.legend()
+        
+        # 5. Guardar el archivo PNG en la misma carpeta donde ejecutes el script
+        ruta_png = 'grafica.png'
+        plt.savefig(ruta_png, dpi=300, bbox_inches='tight') # dpi=300 asegura alta calidad
+        plt.close() # Cerramos la figura para no consumir memoria RAM
+        
+        print(f"\n¡Éxito! Gráfica generada y guardada como: {ruta_png}")
+        messagebox.showinfo("Gráfica Generada", f"La gráfica de dispersión se ha guardado exitosamente como:\n{ruta_png}")
+    
+    def iniciar_proceso_latencias(self):
         """Ejecuta la lectura, modificación y exportación a un solo Excel."""
         if not self.archivos_seleccionados:
             messagebox.showwarning("Atención", "Por favor selecciona archivos primero.")
