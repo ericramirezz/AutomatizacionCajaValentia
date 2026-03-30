@@ -1,12 +1,11 @@
 import customtkinter as ctk
 from tkinter import ttk
-import open
+from app import caja_valentia_app
 
 if __name__ == "__main__":
     root = ctk.CTk()
-    # Forzar theme compatible en macOS
     style = ttk.Style()
     style.theme_use("clam")
 
-    app = open.caja_valentia_app(root)
+    app = caja_valentia_app(root)
     root.mainloop()
