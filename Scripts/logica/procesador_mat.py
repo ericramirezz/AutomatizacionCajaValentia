@@ -1,3 +1,4 @@
+import math
 import pandas as pd
 import scipy.io
 import os
@@ -80,11 +81,32 @@ def guardar_excel(ruta_guardado, dfs_mat, log_fn=print):
     try:
         with pd.ExcelWriter(ruta_guardado, engine='openpyxl') as writer:
             df_promedios = calcular_promedios_latencia(dfs_mat, log_fn)
-            promedio_riesgo = round(df_promedios['Promedio Riesgo'].mean(), 1)
-            promedio_seguro = round(df_promedios['Promedio Seguro'].mean(), 1)
-            indice_nueva_fila = len(df_promedios) + 2
-            df_promedios.loc[indice_nueva_fila, 'Promedio Riesgo'] = promedio_riesgo
-            df_promedios.loc[indice_nueva_fila, 'Promedio Seguro'] = promedio_seguro
+
+            # ── Fila de promedio ──────────────────────────────────────────
+            col_seguro = df_promedios['Promedio Seguro']
+            col_riesgo = df_promedios['Promedio Riesgo']
+
+            promedio_seguro = round(col_seguro.mean(), 1)
+            promedio_riesgo = round(col_riesgo.mean(), 1)
+
+            # ── Fila de SEM (Desviación estándar / √n) ────────────────────
+            n_seguro = col_seguro.count()
+            n_riesgo = col_riesgo.count()
+            sem_seguro = round(col_seguro.std() / math.sqrt(n_seguro), 3) if n_seguro > 1 else 0
+            sem_riesgo = round(col_riesgo.std() / math.sqrt(n_riesgo), 3) if n_riesgo > 1 else 0
+
+            # Fila separadora en blanco, luego promedio, luego SEM
+            idx_sep      = len(df_promedios) + 2
+            idx_promedio = len(df_promedios) + 3
+            idx_sem      = len(df_promedios) + 4
+
+            df_promedios.loc[idx_sep,      'Nombre de archivo'] = ''
+            df_promedios.loc[idx_promedio, 'Nombre de archivo'] = 'Promedio'
+            df_promedios.loc[idx_promedio, 'Promedio Seguro']   = promedio_seguro
+            df_promedios.loc[idx_promedio, 'Promedio Riesgo']   = promedio_riesgo
+            df_promedios.loc[idx_sem,      'Nombre de archivo'] = 'SEM'
+            df_promedios.loc[idx_sem,      'Promedio Seguro']   = sem_seguro
+            df_promedios.loc[idx_sem,      'Promedio Riesgo']   = sem_riesgo
 
             dfs_mat['Promedios Latencia'] = df_promedios
 
@@ -93,8 +115,14 @@ def guardar_excel(ruta_guardado, dfs_mat, log_fn=print):
                 df_final.to_excel(writer, sheet_name=nombre_hoja, index=False)
 
                 worksheet = writer.sheets[nombre_hoja]
-                for cell in worksheet[1]:
-                    cell.font = Font(bold=True)
+                es_hoja_promedios = (nombre_hoja == 'Promedios Latencia')
+
+                for row in worksheet.iter_rows():
+                    for cell in row:
+                        # Negrita en toda la hoja de promedios;
+                        # solo en el encabezado (fila 1) en las demás hojas.
+                        if es_hoja_promedios or cell.row == 1:
+                            cell.font = Font(bold=True)
 
                 for col_idx, column in enumerate(df_final.columns, start=1):
                     col_letter = get_column_letter(col_idx)

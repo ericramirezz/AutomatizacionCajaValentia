@@ -61,6 +61,11 @@ class caja_valentia_app:
             self.lbl_imagen.configure(text="[Valentía Lab]", text_color="gray")
 
     # ── CONSOLA ──────────────────────────────────────────────────────────────
+    def _limpiar_log(self):
+        self.log_area.configure(state='normal')
+        self.log_area.delete("1.0", tk.END)
+        self.log_area.configure(state='disabled')
+
     def log(self, mensaje):
         self.log_area.configure(state='normal')
         self.log_area.insert(tk.END, mensaje + "\n")
@@ -71,7 +76,11 @@ class caja_valentia_app:
     def seleccionar_archivos(self):
         archivos = filedialog.askopenfilenames(
             title="Seleccionar archivos",
-            filetypes=[("Archivos MATLAB", "*.mat"), ("Archivos Excel", "*.xlsx")]
+            filetypes=[
+                ("Archivos compatibles", "*.mat *.xlsx"),
+                ("Archivos MATLAB", "*.mat"),
+                ("Archivos Excel", "*.xlsx"),
+            ]
         )
         if archivos:
             self.gestor.anadir(archivos)
@@ -87,6 +96,7 @@ class caja_valentia_app:
 
     # ── PROCESAMIENTO .MAT ───────────────────────────────────────────────
     def iniciar_proceso_latencias(self):
+        self._limpiar_log()
         if not self.archivos_seleccionados:
             messagebox.showwarning("Atención", "Por favor selecciona archivos primero.")
             return
@@ -116,11 +126,13 @@ class caja_valentia_app:
         ok = guardar_excel(ruta_guardado, dfs_mat, log_fn=self.log)
         if ok:
             messagebox.showinfo("Terminado", f"Se procesaron {len(dfs_mat)} archivos.")
+            self.gestor.vaciar()
         else:
             messagebox.showerror("Error", "No se pudo guardar el archivo Excel.")
 
     # ── GRAFICACIÓN .XLSX ────────────────────────────────────────────────
     def procesar_xlsx(self):
+        self._limpiar_log()
         if not self.archivos_seleccionados:
             self.log("Operación cancelada. No se seleccionaron archivos.")
             return
@@ -128,3 +140,4 @@ class caja_valentia_app:
         ruta_png = generar_grafica(self.archivos_seleccionados, log_fn=self.log)
         if ruta_png:
             messagebox.showinfo("Gráfica Generada", f"La gráfica se guardó como:\n{ruta_png}")
+            self.gestor.vaciar()

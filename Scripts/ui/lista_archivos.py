@@ -65,3 +65,8 @@ class GestorLista:
             nuevo_idx = min(idx, len(self.archivos) - 1)
             self.lista_widget.selection_set(nuevo_idx)
         self.log(f"-> Se eliminó de la lista: {nombre}")
+
+    def vaciar(self):
+        """Limpia completamente la lista de archivos y el widget."""
+        self.archivos.clear()
+        self.actualizar_visual()

@@ -50,13 +50,13 @@ def construir_interfaz(app):
     btn_container_1.columnconfigure(1, weight=1)
 
     _tarjeta(
-        btn_container_1, "Seleccionar Archivos .mat",
+        btn_container_1, "Seleccionar Archivos",
         "Sube los archivos de MATLAB originales para procesar latencias.",
         app.seleccionar_archivos
     ).grid(row=0, column=0, padx=(0, 10), sticky="ew")
 
     _tarjeta(
-        btn_container_1, "Seleccionar Archivos .xlsx",
+        btn_container_1, "Seleccionar para Gráfica",
         "Sube los archivos Excel generados para comparar días.",
         app.seleccionar_archivos
     ).grid(row=0, column=1, padx=(10, 0), sticky="ew")
@@ -106,13 +106,13 @@ def construir_interfaz(app):
     btn_container_2.columnconfigure(1, weight=1)
 
     _tarjeta(
-        btn_container_2, "Iniciar Procesamiento de .mat",
+        btn_container_2, "Iniciar",
         "Limpia datos, elimina lados consecutivos y genera Excel consolidado.",
         app.iniciar_proceso_latencias
     ).grid(row=0, column=0, padx=(0, 10), sticky="ew")
 
     _tarjeta(
-        btn_container_2, "Graficar .xlsx",
+        btn_container_2, "Graficar",
         "Genera gráfica de dispersión comparando promedios en 5 días.",
         app.procesar_xlsx
     ).grid(row=0, column=1, padx=(10, 0), sticky="ew")
