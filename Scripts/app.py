@@ -9,7 +9,7 @@ from ui.fondo_neuronal import FondoNeuronal
 from ui.interfaz import construir_interfaz
 from ui.lista_archivos import GestorLista
 from logica.procesador_mat import leer_mat_a_df, modificar_dataframe, guardar_excel
-from logica.graficador import generar_grafica
+from logica.graficador import generar_grafica, guardar_excel_resumen
 
 # Configuración global del tema
 ctk.set_appearance_mode("dark")
@@ -137,7 +137,39 @@ class caja_valentia_app:
             self.log("Operación cancelada. No se seleccionaron archivos.")
             return
 
-        ruta_png = generar_grafica(self.archivos_seleccionados, log_fn=self.log)
+        fig, df_resumen = generar_grafica(self.archivos_seleccionados, log_fn=self.log)
+        if fig is None:
+            return
+
+        # 1. Mostrar popup interactivo
+        fig.show()
+
+        # 2. Guardar imagen PNG
+        ruta_png = filedialog.asksaveasfilename(
+            title="Guardar gráfica",
+            defaultextension=".png",
+            filetypes=[("Imagen PNG", "*.png"), ("Imagen JPEG", "*.jpg")],
+            initialfile="grafica_latencias.png"
+        )
         if ruta_png:
-            messagebox.showinfo("Gráfica Generada", f"La gráfica se guardó como:\n{ruta_png}")
-            self.gestor.vaciar()
+            fig.savefig(ruta_png, dpi=300, bbox_inches='tight')
+            self.log(f"Gráfica guardada en: {ruta_png}")
+        else:
+            self.log("Guardado de imagen cancelado.")
+
+        import matplotlib.pyplot as plt
+        plt.close(fig)
+
+        # 3. Guardar Excel de resumen (promedios y SEMs por tercio)
+        ruta_xlsx = filedialog.asksaveasfilename(
+            title="Guardar Excel de resumen",
+            defaultextension=".xlsx",
+            filetypes=[("Archivo Excel", "*.xlsx")],
+            initialfile="resumen_tercios.xlsx"
+        )
+        if ruta_xlsx:
+            guardar_excel_resumen(df_resumen, ruta_xlsx, log_fn=self.log)
+        else:
+            self.log("Guardado de Excel cancelado.")
+
+        self.gestor.vaciar()
