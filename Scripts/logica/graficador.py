@@ -116,7 +116,7 @@ def generar_grafica(archivos, log_fn=print):
 
     num_dias = len(archivos)
     ax.set_xticks(range(1, num_dias + 1))
-    ax.set_xticklabels([f'Día {d}' for d in range(1, num_dias + 1)], fontsize=10)
+    ax.set_xticklabels([f'{d}' for d in range(1, num_dias + 1)], fontsize=10)
 
     for d in range(1, num_dias):
         ax.axvline(x=d + 0.5, color='gray', linestyle=':', linewidth=0.8, alpha=0.5)
