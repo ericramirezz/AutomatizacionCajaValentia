@@ -7,40 +7,33 @@ from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
 
 
-def _sem(serie):
-    n = serie.count()
-    return (serie.std() / math.sqrt(n)) if n > 1 else 0
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _sem(valores):
+    """SEM de una lista de valores (desviación estándar / √n)."""
+    n = len(valores)
+    if n < 2:
+        return 0.0
+    s = pd.Series(valores)
+    return float(s.std() / math.sqrt(n))
 
 
 def _tercio_split(serie):
+    """
+    Divide una Serie en 3 grupos dando prioridad de tamaño a los primeros.
+    Ejemplo: n=29 → 10, 10, 9  |  n=10 → 4, 3, 3
+    """
     n = len(serie)
     if n == 0:
-        return [
-            pd.Series(dtype=float),
-            pd.Series(dtype=float),
-            pd.Series(dtype=float),
-        ]
+        return [pd.Series(dtype=float)] * 3
     g1 = math.ceil(n / 3)
     rem = n - g1
     g2 = math.ceil(rem / 2) if rem > 0 else 0
-    g3 = rem - g2
     return [
         serie.iloc[:g1].reset_index(drop=True),
         serie.iloc[g1: g1 + g2].reset_index(drop=True),
         serie.iloc[g1 + g2:].reset_index(drop=True),
     ]
-
-
-def _tercio_stats(serie):
-    """Devuelve [{promedio, sem}, ...] para cada uno de los 3 tercios."""
-    grupos = _tercio_split(serie)
-    result = []
-    for grupo in grupos:
-        result.append({
-            'promedio': round(float(grupo.mean()), 2) if len(grupo) > 0 else None,
-            'sem':      round(_sem(grupo), 3)         if len(grupo) > 0 else None,
-        })
-    return result
 
 
 def _x_tercio(dia, tercio):
@@ -53,9 +46,10 @@ def _x_tercio(dia, tercio):
 
 def generar_grafica(archivos, log_fn=print):
     """
-    Lee archivos .xlsx (uno por día).  Por cada día lee TODAS las hojas de rata,
-    las combina para el scatter plot (promedios por tercio) y guarda los valores
-    crudos por rata para la segunda hoja del Excel de resumen.
+    Lee archivos .xlsx (uno por día). Por cada día:
+      1. Por cada rata: divide sus ensayos en 3 tercios y calcula la media de cada tercio.
+      2. El punto de la gráfica (día D, tercio T) = media de las medias de las ratas.
+         SEM = SEM inter-rata de esas medias.
 
     Returns:
         (fig, df_resumen, dias_ratas_raw)   si hay datos válidos
@@ -71,17 +65,18 @@ def generar_grafica(archivos, log_fn=print):
     # }
     dias_ratas_raw = {}
 
+    # Para la lógica del título dinámico
+    ultimo_seg = {'promedio': None}
+    ultimo_rie = {'promedio': None}
+
     for dia_idx, ruta in enumerate(archivos, start=1):
         try:
             archivo_excel = pd.ExcelFile(ruta)
 
-            all_seguro   = []
-            all_riesgo   = []
             ratas_del_dia = {}
-            rata_pos      = 0
+            rata_pos = 0
 
             for hoja in archivo_excel.sheet_names:
-                # Saltar hoja de promedios
                 if hoja == 'Promedios Latencia':
                     continue
                 df_tmp = archivo_excel.parse(hoja)
@@ -90,15 +85,10 @@ def generar_grafica(archivos, log_fn=print):
 
                 rata_pos += 1
                 seg = df_tmp.loc[df_tmp['Estim Electrico'] == 0,
-                                'Latencia'].reset_index(drop=True)
+                                 'Latencia'].reset_index(drop=True)
                 rie = df_tmp.loc[df_tmp['Estim Electrico'] == 1,
-                                'Latencia'].reset_index(drop=True)
+                                 'Latencia'].reset_index(drop=True)
 
-                # Acumular para el pool del scatter
-                all_seguro.extend(seg.tolist())
-                all_riesgo.extend(rie.tolist())
-
-                # Guardar tercios raw por rata
                 ratas_del_dia[rata_pos] = {
                     'seguro': _tercio_split(seg),
                     'riesgo': _tercio_split(rie),
@@ -106,41 +96,69 @@ def generar_grafica(archivos, log_fn=print):
 
             dias_ratas_raw[dia_idx] = ratas_del_dia
 
-            if not all_seguro and not all_riesgo:
+            if not ratas_del_dia:
                 log_fn(f"Día {dia_idx}: no se encontraron datos válidos.")
                 continue
 
-            seguro_serie = pd.Series(all_seguro).reset_index(drop=True)
-            riesgo_serie = pd.Series(all_riesgo).reset_index(drop=True)
+            # ── Para cada tercio: recoger la media de cada rata ─────────────
+            for t_idx in range(3):          # 0 → tercio 1, 1 → tercio 2, etc.
+                tercio_num = t_idx + 1
 
-            for t_idx, (seg_st, rie_st) in enumerate(
-                zip(_tercio_stats(seguro_serie), _tercio_stats(riesgo_serie)), start=1
-            ):
-                x = _x_tercio(dia_idx, t_idx)
+                medias_seg = []
+                medias_rie = []
 
-                if seg_st['promedio'] is not None and seg_st['promedio'] != 0:
+                for rata_data in ratas_del_dia.values():
+                    grupo_seg = rata_data['seguro'][t_idx]
+                    grupo_rie = rata_data['riesgo'][t_idx]
+                    if len(grupo_seg) > 0:
+                        medias_seg.append(float(grupo_seg.mean()))
+                    if len(grupo_rie) > 0:
+                        medias_rie.append(float(grupo_rie.mean()))
+
+                # Media-de-medias y SEM inter-rata
+                if medias_seg:
+                    prom_seg = round(float(pd.Series(medias_seg).mean()), 2)
+                    sem_seg  = round(_sem(medias_seg), 3)
+                else:
+                    prom_seg, sem_seg = None, None
+
+                if medias_rie:
+                    prom_rie = round(float(pd.Series(medias_rie).mean()), 2)
+                    sem_rie  = round(_sem(medias_rie), 3)
+                else:
+                    prom_rie, sem_rie = None, None
+
+                ultimo_seg = {'promedio': prom_seg}
+                ultimo_rie = {'promedio': prom_rie}
+
+                x = _x_tercio(dia_idx, tercio_num)
+
+                if prom_seg is not None and prom_seg != 0:
                     xs_seguro.append(x)
-                    ys_seguro.append(seg_st['promedio'])
-                    sems_seguro.append(seg_st['sem'])
+                    ys_seguro.append(prom_seg)
+                    sems_seguro.append(sem_seg)
 
-                if rie_st['promedio'] is not None and rie_st['promedio'] != 0:
+                if prom_rie is not None and prom_rie != 0:
                     xs_riesgo.append(x)
-                    ys_riesgo.append(rie_st['promedio'])
-                    sems_riesgo.append(rie_st['sem'])
+                    ys_riesgo.append(prom_rie)
+                    sems_riesgo.append(sem_rie)
 
                 filas_resumen.append({
                     'Día':         dia_idx,
-                    'Tercio':      t_idx,
-                    'Prom Seguro': seg_st['promedio'],
-                    'SEM Seguro':  seg_st['sem'],
-                    'Prom Riesgo': rie_st['promedio'],
-                    'SEM Riesgo':  rie_st['sem'],
+                    'Tercio':      tercio_num,
+                    'Prom Seguro': prom_seg,
+                    'SEM Seguro':  sem_seg,
+                    'Prom Riesgo': prom_rie,
+                    'SEM Riesgo':  sem_rie,
                 })
 
-            total = len(all_seguro) + len(all_riesgo)
+            total_ensayos = sum(
+                sum(len(rd[cond][t]) for cond in ('seguro', 'riesgo') for t in range(3))
+                for rd in ratas_del_dia.values()
+            )
             log_fn(
                 f"Día {dia_idx}: {os.path.basename(ruta)} — "
-                f"{total} ensayos procesados ({rata_pos} rata(s))."
+                f"{total_ensayos} ensayos procesados ({rata_pos} rata(s))."
             )
 
         except Exception as e:
@@ -169,12 +187,18 @@ def generar_grafica(archivos, log_fn=print):
 
     for d in range(1, num_dias):
         ax.axvline(x=d + 0.5, color='gray', linestyle=':', linewidth=0.8, alpha=0.5)
-    if seg_st['promedio'] and rie_st['promedio'] != 0:   
-        ax.set_title('Discrimination (Conflict vs No-conflict)', fontsize=14, fontweight='bold')
-    elif seg_st['promedio'] == 0:
-        ax.set_title('Threat crossings (Noise/Shock + Light/Food)', fontsize=14, fontweight='bold')
+
+    # Título dinámico basado en qué datos hay
+    tiene_seg = ultimo_seg.get('promedio') is not None and ultimo_seg['promedio'] != 0
+    tiene_rie = ultimo_rie.get('promedio') is not None and ultimo_rie['promedio'] != 0
+    if tiene_seg and tiene_rie:
+        titulo = 'Discrimination (Conflict vs No-conflict)'
+    elif not tiene_seg:
+        titulo = 'Threat crossings (Noise/Shock + Light/Food)'
     else:
-        ax.set_title('Reward crossings (Lights + Cross for food)', fontsize=14, fontweight='bold')
+        titulo = 'Reward crossings (Lights + Cross for food)'
+
+    ax.set_title(titulo, fontsize=14, fontweight='bold')
     ax.set_xlabel('Days (block of trial)', fontsize=12)
     ax.set_ylabel('Latencies (s)', fontsize=12)
     ax.legend(fontsize=11)
@@ -193,28 +217,24 @@ def generar_grafica(archivos, log_fn=print):
 
 def _escribir_hoja_raw(ws, dias_ratas_raw, num_dias):
     """
-    Escribe la hoja 'Datos por Rata' con el formato:
-
+    Hoja 'Desglose tercios':
         etiqueta | Seguro_d1 | Riesgo_d1 | Seguro_d2 | Riesgo_d2 | ...
 
-    Agrupado por rata (r1, r2, …) y dentro de cada rata por tercio
-    (Primer tercio, Segundo Tercio, Tercer tercio).
-    Cada bloque tercio muestra los valores crudos verticalmente.
+    Agrupado por rata (r1, r2, …), dentro de cada rata por tercio,
+    mostrando los valores crudos de cada ensayo verticalmente.
     Una fila en blanco separa tercios; una fila extra separa ratas.
     """
     nombres_tercio = ['Primer tercio', 'Segundo Tercio', 'Tercer tercio']
 
-    # ── Encabezado ─────────────────────────────────────────────────────────
+    # Encabezado
     header = ['']
     for d in range(1, num_dias + 1):
         header.append(f'Seguro_d{d}')
         header.append(f'Riesgo_d{d}')
-
     for col_idx, h in enumerate(header, start=1):
         cell = ws.cell(row=1, column=col_idx, value=h)
         cell.font = Font(bold=True)
 
-    # ── Número máximo de ratas vistas en cualquier día ─────────────────────
     max_ratas = 0
     for ratas in dias_ratas_raw.values():
         if ratas:
@@ -223,21 +243,17 @@ def _escribir_hoja_raw(ws, dias_ratas_raw, num_dias):
     current_row = 2
 
     for rata_idx in range(1, max_ratas + 1):
-
-        # Etiqueta de rata (negrita)
         cell = ws.cell(row=current_row, column=1, value=f'r{rata_idx}')
         cell.font = Font(bold=True)
         current_row += 1
 
         for t_idx in range(3):
-
-            # Recopilar los valores de esta rata × tercio para cada día
             segs_por_dia = []
             ries_por_dia = []
 
             for dia_idx in range(1, num_dias + 1):
-                ratas      = dias_ratas_raw.get(dia_idx, {})
-                rata_data  = ratas.get(rata_idx)
+                ratas     = dias_ratas_raw.get(dia_idx, {})
+                rata_data = ratas.get(rata_idx)
                 if rata_data:
                     segs_por_dia.append(rata_data['seguro'][t_idx].tolist())
                     ries_por_dia.append(rata_data['riesgo'][t_idx].tolist())
@@ -248,18 +264,17 @@ def _escribir_hoja_raw(ws, dias_ratas_raw, num_dias):
             max_vals = max(
                 max((len(s) for s in segs_por_dia), default=0),
                 max((len(r) for r in ries_por_dia), default=0),
-                1,          # al menos 1 fila para la etiqueta del tercio
+                1,
             )
 
             for val_row in range(max_vals):
                 row = current_row + val_row
-                # Etiqueta solo en la primera fila del bloque
                 if val_row == 0:
                     ws.cell(row=row, column=1, value=f'  {nombres_tercio[t_idx]}')
 
                 for dia_idx in range(1, num_dias + 1):
-                    seg_col = 2 + (dia_idx - 1) * 2
-                    rie_col = seg_col + 1
+                    seg_col  = 2 + (dia_idx - 1) * 2
+                    rie_col  = seg_col + 1
                     seg_vals = segs_por_dia[dia_idx - 1]
                     rie_vals = ries_por_dia[dia_idx - 1]
 
@@ -271,12 +286,11 @@ def _escribir_hoja_raw(ws, dias_ratas_raw, num_dias):
                                 value=round(float(rie_vals[val_row]), 4))
 
             current_row += max_vals
-            current_row += 1  # fila en blanco entre tercios (y después del último)
+            current_row += 1  # fila en blanco entre tercios
 
-        # Fila extra en blanco entre ratas
-        current_row += 1
+        current_row += 1  # fila extra entre ratas
 
-    # ── Ajustar anchos de columna ──────────────────────────────────────────
+    # Ajustar anchos
     ws.column_dimensions['A'].width = 20
     for d in range(1, num_dias + 1):
         ws.column_dimensions[get_column_letter(2 + (d - 1) * 2)].width = 14
@@ -285,16 +299,15 @@ def _escribir_hoja_raw(ws, dias_ratas_raw, num_dias):
 
 # ── Guardado del Excel de resumen ─────────────────────────────────────────────
 
-def guardar_excel_resumen(df_resumen, ruta_xlsx,
-                        dias_ratas_raw=None, num_dias=0, log_fn=print):
+def guardar_excel_resumen(df_resumen, ruta_xlsx, dias_ratas_raw=None, num_dias=0, log_fn=print):
     """
     Guarda dos hojas:
-    1. 'Resumen Tercios'  — promedios y SEMs por día/tercio (igual que antes).
-    2. 'Datos por Rata'   — valores crudos organizados por rata, día y tercio.
+    1. 'Resumen Tercios'  — media-de-medias y SEM inter-rata por día/tercio.
+    2. 'Desglose Tercios' — valores crudos por rata, día y tercio.
     """
     try:
         with pd.ExcelWriter(ruta_xlsx, engine='openpyxl') as writer:
-            # ── Hoja 1: Resumen Tercios ────────────────────────────────────
+            # Hoja 1
             df_resumen.to_excel(writer, sheet_name='Resumen Tercios', index=False)
             ws_res = writer.sheets['Resumen Tercios']
             for cell in ws_res[1]:
@@ -308,10 +321,9 @@ def guardar_excel_resumen(df_resumen, ruta_xlsx,
                 )
                 ws_res.column_dimensions[col_letter].width = max_len + 3
 
-            # ── Hoja 2: Datos por Rata ─────────────────────────────────────
+            # Hoja 2
             if dias_ratas_raw and num_dias > 0:
-                wb = writer.book
-                ws_raw = wb.create_sheet(title='Desglose tercios')
+                ws_raw = writer.book.create_sheet(title='Desglose Tercios')
                 _escribir_hoja_raw(ws_raw, dias_ratas_raw, num_dias)
 
         log_fn(f"Excel de resumen guardado en: {ruta_xlsx}")
