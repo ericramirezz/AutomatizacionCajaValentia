@@ -42,19 +42,15 @@ def leer_mat_a_df(ruta_archivo, log_fn=print):
         return None
 
 
-def eliminar_lados_consecutivos(df):
-    """Elimina filas con el mismo 'Lado' consecutivo, dejando solo la primera de cada bloque."""
-    if 'Lado' not in df.columns:
-        return df
-    cambios = df['Lado'].ne(df['Lado'].shift()).cumsum()
-    return df.groupby(cambios).first().reset_index(drop=True)
-
-
 def modificar_dataframe(df):
-    """Limpia y transforma el DataFrame: elimina columnas, filtra y renumera ensayos."""
+    """
+    Limpia y transforma el DataFrame:
+    - Elimina columnas auxiliares.
+    - Conserva SOLO filas donde Desplazamiento > 1.
+    - Re-numera la columna Ensayo desde 1.
+    """
     df = df.drop(['Tiempo Absoluto', 'Palancas Izq', 'Palancas Der', 'archivo_origen'], axis=1)
-    df = df[df['Desplazamiento'] > 1]
-    df = eliminar_lados_consecutivos(df)
+    df = df[df['Desplazamiento'] > 1].reset_index(drop=True)
     df['Ensayo'] = range(1, len(df) + 1)
     return df
 
@@ -77,7 +73,10 @@ def calcular_promedios_latencia(dfs_dict, log_fn=print):
 
 
 def guardar_excel(ruta_guardado, dfs_mat, log_fn=print):
-    """Escribe todos los DataFrames en un archivo Excel con formato."""
+    """
+    Escribe todos los DataFrames en un archivo Excel con formato.
+    La hoja 'Promedios Latencia' queda en la primera posición.
+    """
     try:
         with pd.ExcelWriter(ruta_guardado, engine='openpyxl') as writer:
             df_promedios = calcular_promedios_latencia(dfs_mat, log_fn)
@@ -95,7 +94,6 @@ def guardar_excel(ruta_guardado, dfs_mat, log_fn=print):
             sem_seguro = round(col_seguro.std() / math.sqrt(n_seguro), 3) if n_seguro > 1 else 0
             sem_riesgo = round(col_riesgo.std() / math.sqrt(n_riesgo), 3) if n_riesgo > 1 else 0
 
-            # Fila separadora en blanco, luego promedio, luego SEM
             idx_sep      = len(df_promedios) + 2
             idx_promedio = len(df_promedios) + 3
             idx_sem      = len(df_promedios) + 4
@@ -108,21 +106,33 @@ def guardar_excel(ruta_guardado, dfs_mat, log_fn=print):
             df_promedios.loc[idx_sem,      'Promedio Seguro']   = sem_seguro
             df_promedios.loc[idx_sem,      'Promedio Riesgo']   = sem_riesgo
 
-            dfs_mat['Promedios Latencia'] = df_promedios
+            # ── Escribir primero "Promedios Latencia" para que quede en Sheet 1 ──
+            nombre_hoja_prom = 'Promedios Latencia'
+            df_promedios.to_excel(writer, sheet_name=nombre_hoja_prom, index=False)
+            ws_prom = writer.sheets[nombre_hoja_prom]
+            for row in ws_prom.iter_rows():
+                for cell in row:
+                    cell.font = Font(bold=True)
+            for col_idx, column in enumerate(df_promedios.columns, start=1):
+                col_letter = get_column_letter(col_idx)
+                max_length = len(str(column))
+                for cell in ws_prom[col_letter]:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(str(cell.value))
+                    except Exception:
+                        pass
+                ws_prom.column_dimensions[col_letter].width = max_length + 2
 
+            # ── Luego el resto de hojas (una por rata) ────────────────────
             for nombre_archivo, df_final in dfs_mat.items():
                 nombre_hoja = nombre_archivo.replace('.mat', '')[:31]
                 df_final.to_excel(writer, sheet_name=nombre_hoja, index=False)
-
                 worksheet = writer.sheets[nombre_hoja]
-                es_hoja_promedios = (nombre_hoja == 'Promedios Latencia')
 
-                for row in worksheet.iter_rows():
-                    for cell in row:
-                        # Negrita en toda la hoja de promedios;
-                        # solo en el encabezado (fila 1) en las demás hojas.
-                        if es_hoja_promedios or cell.row == 1:
-                            cell.font = Font(bold=True)
+                # Solo negrita en encabezado
+                for cell in worksheet[1]:
+                    cell.font = Font(bold=True)
 
                 for col_idx, column in enumerate(df_final.columns, start=1):
                     col_letter = get_column_letter(col_idx)

@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
+import matplotlib.pyplot as plt
 from PIL import Image
 
 from ui.fondo_neuronal import FondoNeuronal
@@ -108,7 +109,7 @@ class caja_valentia_app:
                 df_modificado = modificar_dataframe(df)
                 nombre_archivo = os.path.basename(ruta)
                 dfs_mat[nombre_archivo] = df_modificado
-                self.log(f"OK: {nombre_archivo} procesado.")
+                self.log(f"OK: {nombre_archivo} procesado ({len(df_modificado)} ensayos).")
 
         if not dfs_mat:
             self.log("No se pudieron procesar los archivos.")
@@ -137,12 +138,15 @@ class caja_valentia_app:
             self.log("Operación cancelada. No se seleccionaron archivos.")
             return
 
-        fig, df_resumen = generar_grafica(self.archivos_seleccionados, log_fn=self.log)
+        num_dias = len(self.archivos_seleccionados)
+        fig, df_resumen, dias_ratas_raw = generar_grafica(
+            self.archivos_seleccionados, log_fn=self.log
+        )
         if fig is None:
             return
 
-        # 1. Mostrar popup interactivo
-        fig.show()
+        # 1. Mostrar ventana interactiva (se queda abierta hasta que el usuario la cierre)
+        plt.show(block=False)
 
         # 2. Guardar imagen PNG
         ruta_png = filedialog.asksaveasfilename(
@@ -157,10 +161,7 @@ class caja_valentia_app:
         else:
             self.log("Guardado de imagen cancelado.")
 
-        import matplotlib.pyplot as plt
-        plt.close(fig)
-
-        # 3. Guardar Excel de resumen (promedios y SEMs por tercio)
+        # 3. Guardar Excel de resumen (Resumen Tercios + Datos por Rata)
         ruta_xlsx = filedialog.asksaveasfilename(
             title="Guardar Excel de resumen",
             defaultextension=".xlsx",
@@ -168,7 +169,12 @@ class caja_valentia_app:
             initialfile="resumen_tercios.xlsx"
         )
         if ruta_xlsx:
-            guardar_excel_resumen(df_resumen, ruta_xlsx, log_fn=self.log)
+            guardar_excel_resumen(
+                df_resumen, ruta_xlsx,
+                dias_ratas_raw=dias_ratas_raw,
+                num_dias=num_dias,
+                log_fn=self.log
+            )
         else:
             self.log("Guardado de Excel cancelado.")
 
