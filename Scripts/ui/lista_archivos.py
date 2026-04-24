@@ -57,14 +57,19 @@ class GestorLista:
         if not seleccion:
             messagebox.showinfo("Información", "Selecciona un archivo de la lista para eliminar.")
             return
-        idx = seleccion[0]
-        nombre = os.path.basename(self.archivos[idx])
-        del self.archivos[idx]
+        # Eliminar en orden inverso para mantener los índices correctos
+        nombres = []
+        for idx in reversed(seleccion):
+            nombres.append(os.path.basename(self.archivos[idx]))
+            del self.archivos[idx]
         self.actualizar_visual()
         if self.archivos:
-            nuevo_idx = min(idx, len(self.archivos) - 1)
+            nuevo_idx = min(seleccion[0], len(self.archivos) - 1)
             self.lista_widget.selection_set(nuevo_idx)
-        self.log(f"-> Se eliminó de la lista: {nombre}")
+        if len(nombres) == 1:
+            self.log(f"-> Se eliminó de la lista: {nombres[0]}")
+        else:
+            self.log(f"-> Se eliminaron {len(nombres)} archivos de la lista.")
 
     def vaciar(self):
         """Limpia completamente la lista de archivos y el widget."""

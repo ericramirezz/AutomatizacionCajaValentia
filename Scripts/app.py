@@ -24,7 +24,7 @@ class caja_valentia_app:
         self.root.minsize(900, 750)
         self.root.bind("<Escape>", lambda e: self.root.destroy())
 
-        self.FILENAME_LOGO = "ifc_logo.png"
+        self.FILENAME_LOGO = "C:\AutomatizacionCajaValentia\Scripts\ifc_logo.png"
         self.archivos_seleccionados = []
 
         # 1. Fondo animado (debe ir primero para quedar detrás de todo)
@@ -166,7 +166,7 @@ class caja_valentia_app:
             title="Guardar Excel de resumen",
             defaultextension=".xlsx",
             filetypes=[("Archivo Excel", "*.xlsx")],
-            initialfile="resumen_tercios.xlsx"
+            initialfile="resumen_bloques.xlsx"
         )
         if ruta_xlsx:
             guardar_excel_resumen(

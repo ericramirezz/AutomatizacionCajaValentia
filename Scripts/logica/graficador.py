@@ -47,9 +47,9 @@ def _x_tercio(dia, tercio):
 def generar_grafica(archivos, log_fn=print):
     """
     Lee archivos .xlsx (uno por día). Por cada día:
-      1. Por cada rata: divide sus ensayos en 3 tercios y calcula la media de cada tercio.
-      2. El punto de la gráfica (día D, tercio T) = media de las medias de las ratas.
-         SEM = SEM inter-rata de esas medias.
+    1. Por cada rata: divide sus ensayos en 3 tercios y calcula la media de cada tercio.
+    2. El punto de la gráfica (día D, tercio T) = media de las medias de las ratas.
+    SEM = SEM inter-rata de esas medias.
 
     Returns:
         (fig, df_resumen, dias_ratas_raw)   si hay datos válidos
@@ -64,10 +64,6 @@ def generar_grafica(archivos, log_fn=print):
     #     'riesgo': [Serie_t1, Serie_t2, Serie_t3],
     # }
     dias_ratas_raw = {}
-
-    # Para la lógica del título dinámico
-    ultimo_seg = {'promedio': None}
-    ultimo_rie = {'promedio': None}
 
     for dia_idx, ruta in enumerate(archivos, start=1):
         try:
@@ -85,9 +81,9 @@ def generar_grafica(archivos, log_fn=print):
 
                 rata_pos += 1
                 seg = df_tmp.loc[df_tmp['Estim Electrico'] == 0,
-                                 'Latencia'].reset_index(drop=True)
+                                'Latencia'].reset_index(drop=True)
                 rie = df_tmp.loc[df_tmp['Estim Electrico'] == 1,
-                                 'Latencia'].reset_index(drop=True)
+                                'Latencia'].reset_index(drop=True)
 
                 ratas_del_dia[rata_pos] = {
                     'seguro': _tercio_split(seg),
@@ -128,9 +124,6 @@ def generar_grafica(archivos, log_fn=print):
                 else:
                     prom_rie, sem_rie = None, None
 
-                ultimo_seg = {'promedio': prom_seg}
-                ultimo_rie = {'promedio': prom_rie}
-
                 x = _x_tercio(dia_idx, tercio_num)
 
                 if prom_seg is not None and prom_seg != 0:
@@ -145,7 +138,7 @@ def generar_grafica(archivos, log_fn=print):
 
                 filas_resumen.append({
                     'Día':         dia_idx,
-                    'Tercio':      tercio_num,
+                    'Bloque':      tercio_num,
                     'Prom Seguro': prom_seg,
                     'SEM Seguro':  sem_seg,
                     'Prom Riesgo': prom_rie,
@@ -188,12 +181,12 @@ def generar_grafica(archivos, log_fn=print):
     for d in range(1, num_dias):
         ax.axvline(x=d + 0.5, color='gray', linestyle=':', linewidth=0.8, alpha=0.5)
 
-    # Título dinámico basado en qué datos hay
-    tiene_seg = ultimo_seg.get('promedio') is not None and ultimo_seg['promedio'] != 0
-    tiene_rie = ultimo_rie.get('promedio') is not None and ultimo_rie['promedio'] != 0
-    if tiene_seg and tiene_rie:
+    # Título basado en si hay datos seguros y/o de riesgo en CUALQUIER día
+    any_seg = len(xs_seguro) > 0
+    any_rie = len(xs_riesgo) > 0
+    if any_seg and any_rie:
         titulo = 'Discrimination (Conflict vs No-conflict)'
-    elif not tiene_seg:
+    elif not any_seg:
         titulo = 'Threat crossings (Noise/Shock + Light/Food)'
     else:
         titulo = 'Reward crossings (Lights + Cross for food)'
@@ -224,7 +217,7 @@ def _escribir_hoja_raw(ws, dias_ratas_raw, num_dias):
     mostrando los valores crudos de cada ensayo verticalmente.
     Una fila en blanco separa tercios; una fila extra separa ratas.
     """
-    nombres_tercio = ['Primer tercio', 'Segundo Tercio', 'Tercer tercio']
+    nombres_tercio = ['Primer bloque', 'Segundo bloque', 'Tercer bloque']
 
     # Encabezado
     header = ['']
@@ -297,6 +290,85 @@ def _escribir_hoja_raw(ws, dias_ratas_raw, num_dias):
         ws.column_dimensions[get_column_letter(3 + (d - 1) * 2)].width = 14
 
 
+# ── Tercera hoja: promedio por rata y por día ─────────────────────────────────
+
+def _escribir_hoja_promedios(ws, dias_ratas_raw, num_dias):
+    """
+    Hoja 'Promedio Rata':
+    Columnas: Rata | Seguro Día 1 | Riesgo Día 1 | ... | Prom Seguro | Prom Riesgo
+    Cada fila es una rata; los valores por día son el promedio de TODOS sus ensayos
+    de ese día (concatenando los tres tercios). Las dos últimas columnas son el
+    promedio de esos promedios diarios a lo largo de todos los días.
+    """
+    # Encabezado: columnas por día + dos columnas de promedio global
+    header = ['Rata']
+    for d in range(1, num_dias + 1):
+        header.append(f'Seguro Día {d}')
+        header.append(f'Riesgo Día {d}')
+    col_prom_seg = len(header) + 1   # índice (1-based) de la columna Prom Seguro
+    col_prom_rie = col_prom_seg + 1
+    header.append('Prom Seguro')
+    header.append('Prom Riesgo')
+
+    for col_idx, h in enumerate(header, start=1):
+        cell = ws.cell(row=1, column=col_idx, value=h)
+        cell.font = Font(bold=True)
+
+    # Número máximo de ratas a lo largo de todos los días
+    max_ratas = 0
+    for ratas in dias_ratas_raw.values():
+        if ratas:
+            max_ratas = max(max_ratas, max(ratas.keys()))
+
+    for rata_idx in range(1, max_ratas + 1):
+        row = rata_idx + 1
+        cell = ws.cell(row=row, column=1, value=f'r{rata_idx}')
+        cell.font = Font(bold=True)
+
+        promedios_seg_dias = []   # un valor por cada día con datos
+        promedios_rie_dias = []
+
+        for dia_idx in range(1, num_dias + 1):
+            ratas     = dias_ratas_raw.get(dia_idx, {})
+            rata_data = ratas.get(rata_idx)
+
+            seg_col = 2 + (dia_idx - 1) * 2
+            rie_col = seg_col + 1
+
+            if rata_data:
+                # Concatenar los tres tercios para obtener todos los ensayos del día
+                all_seg = pd.concat(rata_data['seguro']).dropna()
+                all_rie = pd.concat(rata_data['riesgo']).dropna()
+
+                if len(all_seg) > 0:
+                    prom_dia_seg = round(float(all_seg.mean()), 4)
+                    ws.cell(row=row, column=seg_col, value=prom_dia_seg)
+                    promedios_seg_dias.append(prom_dia_seg)
+
+                if len(all_rie) > 0:
+                    prom_dia_rie = round(float(all_rie.mean()), 4)
+                    ws.cell(row=row, column=rie_col, value=prom_dia_rie)
+                    promedios_rie_dias.append(prom_dia_rie)
+
+        # Promedio global (promedio de los promedios diarios) para esta rata
+        if promedios_seg_dias:
+            cell = ws.cell(row=row, column=col_prom_seg,
+                           value=round(float(pd.Series(promedios_seg_dias).mean()), 4))
+            cell.font = Font(bold=True)
+        if promedios_rie_dias:
+            cell = ws.cell(row=row, column=col_prom_rie,
+                           value=round(float(pd.Series(promedios_rie_dias).mean()), 4))
+            cell.font = Font(bold=True)
+
+    # Ajustar anchos de columna
+    ws.column_dimensions['A'].width = 10
+    for d in range(1, num_dias + 1):
+        ws.column_dimensions[get_column_letter(2 + (d - 1) * 2)].width = 15
+        ws.column_dimensions[get_column_letter(3 + (d - 1) * 2)].width = 15
+    ws.column_dimensions[get_column_letter(col_prom_seg)].width = 14
+    ws.column_dimensions[get_column_letter(col_prom_rie)].width = 14
+
+
 # ── Guardado del Excel de resumen ─────────────────────────────────────────────
 
 def guardar_excel_resumen(df_resumen, ruta_xlsx, dias_ratas_raw=None, num_dias=0, log_fn=print):
@@ -308,8 +380,8 @@ def guardar_excel_resumen(df_resumen, ruta_xlsx, dias_ratas_raw=None, num_dias=0
     try:
         with pd.ExcelWriter(ruta_xlsx, engine='openpyxl') as writer:
             # Hoja 1
-            df_resumen.to_excel(writer, sheet_name='Resumen Tercios', index=False)
-            ws_res = writer.sheets['Resumen Tercios']
+            df_resumen.to_excel(writer, sheet_name='Resumen Bloques', index=False)
+            ws_res = writer.sheets['Resumen Bloques']
             for cell in ws_res[1]:
                 cell.font = Font(bold=True)
             for col_idx, col in enumerate(df_resumen.columns, start=1):
@@ -323,8 +395,13 @@ def guardar_excel_resumen(df_resumen, ruta_xlsx, dias_ratas_raw=None, num_dias=0
 
             # Hoja 2
             if dias_ratas_raw and num_dias > 0:
-                ws_raw = writer.book.create_sheet(title='Desglose Tercios')
+                ws_raw = writer.book.create_sheet(title='Desglose Bloques')
                 _escribir_hoja_raw(ws_raw, dias_ratas_raw, num_dias)
+
+            # Hoja 3: promedios por rata y por día
+            if dias_ratas_raw and num_dias > 0:
+                ws_prom = writer.book.create_sheet(title='Promedio Rata')
+                _escribir_hoja_promedios(ws_prom, dias_ratas_raw, num_dias)
 
         log_fn(f"Excel de resumen guardado en: {ruta_xlsx}")
         return True

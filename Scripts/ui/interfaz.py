@@ -69,7 +69,7 @@ def construir_interfaz(app):
         lista_frame, height=5, bg="#121212", fg="#ffffff",
         selectbackground="#800607", selectforeground="white",
         borderwidth=1, relief="flat", highlightcolor="#333333",
-        font=("Arial", 10)
+        font=("Arial", 10), selectmode=tk.EXTENDED
     )
     app.lista_archivos.pack(side="left", fill="x", expand=True, padx=(0, 10))
 
