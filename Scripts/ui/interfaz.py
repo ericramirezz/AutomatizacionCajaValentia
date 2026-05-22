@@ -1,16 +1,14 @@
 import tkinter as tk
 import customtkinter as ctk
 
+#funciones que construyen todos los widgets visuales de la ventana principal
 
 def construir_interfaz(app):
     """
-    Construye todos los widgets de la ventana principal y los asocia a `app`.
-    Usa app.root como ventana raíz y deja referencias en el objeto app.
-
-    Widgets creados en app:
-        app.lbl_imagen      — label del logo en el header
-        app.lista_archivos  — tk.Listbox de archivos
-        app.log_area        — CTkTextbox de consola
+    construye y empaqueta la totalidad de los elementos visuales que componen la ventana principal de la aplicacion
+    organizando los contenedores botones y areas de texto mediante los gestores de geometria de customtkinter
+    Args: app -> instancia principal de la clase que contiene la raiz de la ventana y los metodos logicos a ejecutar
+    Return: no regresa valores pero inicializa y guarda las referencias de los widgets clave dentro del mismo objeto app
     """
     root = app.root
 
@@ -23,7 +21,7 @@ def construir_interfaz(app):
     content = ctk.CTkFrame(main_frame, fg_color="transparent")
     content.pack(fill="both", expand=True, padx=30, pady=30)
 
-    # ── HEADER ──────────────────────────────────────────────────────────────
+    #construimos el contenedor superior transparente que alojara el titulo principal de la herramienta y el espacio reservado para el logo institucional
     header_frame = ctk.CTkFrame(content, fg_color="transparent")
     header_frame.pack(fill="x", pady=(0, 15))
 
@@ -35,7 +33,7 @@ def construir_interfaz(app):
     app.lbl_imagen = ctk.CTkLabel(header_frame, text="")
     app.lbl_imagen.pack(side="right")
 
-    # ── SECCIÓN 1: CARGA DE ARCHIVOS ─────────────────────────────────────
+    #creamos un marco visualmente diferenciado con bordes redondeados para agrupar los controles relacionados con la importacion de datos al sistema
     carga_frame = ctk.CTkFrame(content, fg_color="#242424", corner_radius=15)
     carga_frame.pack(fill="x", pady=(0, 10), ipady=10)
 
@@ -61,7 +59,7 @@ def construir_interfaz(app):
         app.seleccionar_archivos
     ).grid(row=0, column=1, padx=(10, 0), sticky="ew")
 
-    # ── LISTA DE ARCHIVOS ────────────────────────────────────────────────
+    #implementamos un cuadro de lista interactivo de tkinter nativo acompañado de controles laterales para gestionar y ordenar la cola de procesamiento
     lista_frame = ctk.CTkFrame(content, fg_color="transparent")
     lista_frame.pack(fill="x", pady=10)
 
@@ -91,7 +89,7 @@ def construir_interfaz(app):
         command=app.eliminar_archivo, fg_color="#800607", hover_color="#a10b0c"
     ).pack()
 
-    # ── SECCIÓN 2: ACCIONES ──────────────────────────────────────────────
+    #diseñamos un segundo bloque de controles para alojar los botones de ejecucion principal que desencadenaran los algoritmos de analisis y graficado
     procesamiento_frame = ctk.CTkFrame(content, fg_color="#242424", corner_radius=15)
     procesamiento_frame.pack(fill="x", pady=(10, 15), ipady=10)
 
@@ -117,7 +115,7 @@ def construir_interfaz(app):
         app.procesar_xlsx
     ).grid(row=0, column=1, padx=(10, 0), sticky="ew")
 
-    # ── CONSOLA DE LOGS ──────────────────────────────────────────────────
+    #configuramos un area de texto de solo lectura en la parte inferior para mostrar el registro de eventos y un texto de ayuda para atajos de teclado
     ctk.CTkLabel(
         content, text="Presiona ESC para salir del programa.",
         font=("Arial", 11, "bold"), text_color="#a3a3a3"
@@ -131,10 +129,16 @@ def construir_interfaz(app):
     app.log_area.configure(state="disabled")
 
 
-# ── Helpers privados ────────────────────────────────────────────────────────
-
 def _tarjeta(parent, texto_boton, texto_subtitulo, comando):
-    """Crea un frame con botón + subtítulo (widget reutilizable)."""
+    """
+    genera un modulo de interfaz de usuario empaquetado y reutilizable que combina un boton interactivo de accion principal
+    con una etiqueta de texto descriptiva debajo para guiar al usuario sobre el proposito exacto de la funcion a ejecutar
+    Args: parent -> widget o frame contenedor padre donde se anidara y dibujara este nuevo bloque visual
+        texto_boton -> cadena de texto principal que se mostrara centrada y resaltada dentro del boton clickeable
+        texto_subtitulo -> texto de ayuda secundario que aparecera con una fuente mas pequeña y de color tenue en la parte inferior
+        comando -> referencia directa a la funcion o metodo interno que se disparara automaticamente al hacer clic en el boton
+    Return: regresa la instancia del frame transparente ya construido con todos sus elementos internos empaquetados y listos para inyectarse
+    """
     frame = ctk.CTkFrame(parent, fg_color="transparent")
 
     ctk.CTkButton(

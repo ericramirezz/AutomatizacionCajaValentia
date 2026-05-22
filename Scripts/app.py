@@ -12,13 +12,21 @@ from ui.lista_archivos import GestorLista
 from logica.procesador_mat import leer_mat_a_df, modificar_dataframe, guardar_excel
 from logica.graficador import generar_grafica, guardar_excel_resumen
 
-# Configuración global del tema
+#configuracion global del tema visual de la aplicacion
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("dark-blue")
 
+#clase principal que coordina toda la aplicacion: interfaz, logica y archivos
 
 class caja_valentia_app:
+
     def __init__(self, root):
+        """
+        inicializa la ventana principal de la aplicacion y orquesta el montaje de todos los componentes visuales
+        y logicos estableciendo el tamaño minimo de la interfaz y preparando el arreglo de la sesion de archivos
+        Args: root -> ventana raiz principal generada por customtkinter que contendra absolutamente toda la aplicacion
+        Return: no regresa nada pero deja la aplicacion completamente construida interactiva y con el fondo animado corriendo
+        """
         self.root = root
         self.root.title("Procesador de .mat a Excel")
         self.root.minsize(900, 750)
@@ -27,25 +35,30 @@ class caja_valentia_app:
         self.FILENAME_LOGO = "C:\AutomatizacionCajaValentia\Scripts\ifc_logo.png"
         self.archivos_seleccionados = []
 
-        # 1. Fondo animado (debe ir primero para quedar detrás de todo)
+        #el fondo se crea primero para que quede detras de todos los demas widgets
         self.fondo = FondoNeuronal(root)
 
-        # 2. Interfaz (crea los widgets y los asigna a self.*)
+        #se construye la interfaz, que crea y asigna los widgets al objeto app
         construir_interfaz(self)
 
-        # 3. Gestor de lista (necesita self.lista_archivos ya creado)
+        #el gestor de lista necesita que lista_archivos ya exista, por eso va despues
         self.gestor = GestorLista(
             lista_widget=self.lista_archivos,
             archivos_seleccionados=self.archivos_seleccionados,
             log_fn=self.log
         )
 
-        # 4. Logo y animación
+        #se carga el logo y se arranca la animacion del fondo
         self._cargar_logo()
         self.fondo.animar()
 
-    # ── LOGO ────────────────────────────────────────────────────────────────
     def _cargar_logo(self):
+        """
+        intenta localizar y cargar la imagen del logotipo institucional desde una ruta absoluta predefinida en el disco duro
+        redimensionando el archivo para inyectarlo al encabezado o mostrando un texto alternativo discreto si no se encuentra
+        Args: no recibe parametros externos ya que utiliza la constante de ruta definida en la misma clase
+        Return: no regresa nada unicamente modifica el widget grafico de la etiqueta superior
+        """
         ruta_script = os.path.dirname(os.path.abspath(__file__))
         ruta_imagen = os.path.join(ruta_script, self.FILENAME_LOGO)
 
@@ -59,22 +72,39 @@ class caja_valentia_app:
             except Exception as e:
                 self.log(f"Aviso: No se pudo cargar el logo: {str(e)}")
         else:
+            #si no se encuentra el archivo se muestra un texto alternativo
             self.lbl_imagen.configure(text="[Valentía Lab]", text_color="gray")
 
-    # ── CONSOLA ──────────────────────────────────────────────────────────────
     def _limpiar_log(self):
+        """
+        habilita de manera temporal los permisos de escritura del area de texto de la consola para purgar todo
+        su contenido actual de forma inmediata y vuelve a bloquear el componente para mantener la seguridad visual
+        Args: no recibe parametros
+        Return: no regresa nada
+        """
         self.log_area.configure(state='normal')
         self.log_area.delete("1.0", tk.END)
         self.log_area.configure(state='disabled')
 
     def log(self, mensaje):
+        """
+        inserta una nueva linea de texto al final de la consola grafica desplazando automaticamente el scroll
+        para garantizar que el usuario siempre pueda leer las ultimas notificaciones del sistema sin interactuar
+        Args: mensaje -> cadena de texto que contiene la informacion de diagnostico o aviso que se desea proyectar
+        Return: no regresa nada
+        """
         self.log_area.configure(state='normal')
         self.log_area.insert(tk.END, mensaje + "\n")
         self.log_area.see(tk.END)
         self.log_area.configure(state='disabled')
 
-    # ── GESTIÓN DE ARCHIVOS (delegada al GestorLista) ─────────────────────
     def seleccionar_archivos(self):
+        """
+        despliega una ventana de exploracion nativa del sistema operativo forzando filtros de busqueda para asegurar
+        que el usuario unicamente pueda seleccionar e importar archivos en los formatos procesables del experimento
+        Args: no recibe parametros
+        Return: no regresa nada pero manda las rutas capturadas directamente hacia el modulo gestor de la lista
+        """
         archivos = filedialog.askopenfilenames(
             title="Seleccionar archivos",
             filetypes=[
@@ -87,16 +117,39 @@ class caja_valentia_app:
             self.gestor.anadir(archivos)
 
     def mover_arriba(self):
+        """
+        sirve como puente de interconexion que transmite la intencion del usuario de recorrer un archivo hacia
+        la parte superior de la cola directamente al gestor logico encargado de actualizar la tabla visual
+        Args: no recibe parametros
+        Return: no regresa nada
+        """
         self.gestor.mover_arriba()
 
     def mover_abajo(self):
+        """
+        actua como un canal delegador que comunica el clic del boton inferior con la clase especializada de la lista
+        para desplazar el elemento seleccionado hacia el final de la secuencia de procesamiento
+        Args: no recibe parametros
+        Return: no regresa nada
+        """
         self.gestor.mover_abajo()
 
     def eliminar_archivo(self):
+        """
+        retransmite el evento de borrado al controlador de la lista visual para expulsar el archivo de la memoria
+        evitando que sea tomado en cuenta durante las iteraciones de los analisis estadisticos o generacion de graficas
+        Args: no recibe parametros
+        Return: no regresa nada
+        """
         self.gestor.eliminar()
 
-    # ── PROCESAMIENTO .MAT ───────────────────────────────────────────────
     def iniciar_proceso_latencias(self):
+        """
+        orquesta el flujo de trabajo principal de conversion iterando sobre el lote completo de archivos matlab crudos
+        para limpiarlos individualmente estandarizarlos en diccionarios y finalmente condensar toda la data en un solo excel
+        Args: no recibe parametros externos ya que opera basandose enteramente en la memoria de self.archivos_seleccionados
+        Return: no regresa nada pero puede desplegar alertas modales si el usuario olvido cargar documentos o fallo el guardado
+        """
         self._limpiar_log()
         if not self.archivos_seleccionados:
             messagebox.showwarning("Atención", "Por favor selecciona archivos primero.")
@@ -115,6 +168,7 @@ class caja_valentia_app:
             self.log("No se pudieron procesar los archivos.")
             return
 
+        #se pide al usuario donde quiere guardar el archivo de resultados
         ruta_guardado = filedialog.asksaveasfilename(
             title="Guardar datos procesados",
             defaultextension=".xlsx",
@@ -131,8 +185,13 @@ class caja_valentia_app:
         else:
             messagebox.showerror("Error", "No se pudo guardar el archivo Excel.")
 
-    # ── GRAFICACIÓN .XLSX ────────────────────────────────────────────────
     def procesar_xlsx(self):
+        """
+        coordina el proceso de analisis visual extrayendo los datos diarios compilados para mapearlos en una grafica
+        de dispersion estadistica permitiendo guardar el canvas generado como imagen de alta resolucion y exportar tablas
+        Args: no recibe parametros
+        Return: no regresa nada
+        """
         self._limpiar_log()
         if not self.archivos_seleccionados:
             self.log("Operación cancelada. No se seleccionaron archivos.")
@@ -145,10 +204,10 @@ class caja_valentia_app:
         if fig is None:
             return
 
-        # 1. Mostrar ventana interactiva (se queda abierta hasta que el usuario la cierre)
+        #se muestra la ventana interactiva de la grafica sin bloquear la aplicacion
         plt.show(block=False)
 
-        # 2. Guardar imagen PNG
+        #se pide donde guardar la imagen png
         ruta_png = filedialog.asksaveasfilename(
             title="Guardar gráfica",
             defaultextension=".png",
@@ -161,7 +220,7 @@ class caja_valentia_app:
         else:
             self.log("Guardado de imagen cancelado.")
 
-        # 3. Guardar Excel de resumen (Resumen Tercios + Datos por Rata)
+        #se pide donde guardar el excel con el resumen por bloques y por rata
         ruta_xlsx = filedialog.asksaveasfilename(
             title="Guardar Excel de resumen",
             defaultextension=".xlsx",
