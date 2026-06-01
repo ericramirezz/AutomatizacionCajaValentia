@@ -21,6 +21,8 @@ La lógica de procesamiento de este software y el diseño del protocolo de anál
 
 **Si utilizas este software en tu investigación, por favor asegúrate de citar el artículo original mencionado arriba.**
 
+##Vídeo de instalación y explicación: https://youtu.be/M_hgrKpL-go
+
 ## 🛠️ Requisitos e Instalación
 
 El sistema requiere **Python 3.10 o superior** y las siguientes dependencias:
