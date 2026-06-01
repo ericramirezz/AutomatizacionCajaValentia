@@ -12,7 +12,7 @@ Esta herramienta fue diseñada específicamente para trabajar con **Pruebas de C
 * **Exportación Consolidada:** Creación de reportes en Excel (`.xlsx`) con hojas de resumen, promedios por rata y desglose detallado de cada ensayo.
 * **Interfaz de Usuario:** UI intuitiva construida con `CustomTkinter`, que incluye una consola de logs en tiempo real y un fondo animado de red neuronal.
 
-## Metodologíaa
+## Metodología
 
 La lógica de procesamiento de este software y el diseño del protocolo de análisis se basan estrictamente en la metodología descrita en el siguiente artículo científico:
 
@@ -21,7 +21,7 @@ La lógica de procesamiento de este software y el diseño del protocolo de anál
 
 **Si utilizas este software en tu investigación, por favor asegúrate de citar el artículo original mencionado arriba.**
 
-##Vídeo de instalación y explicación: https://youtu.be/M_hgrKpL-go
+## Vídeo de instalación y explicación: https://youtu.be/M_hgrKpL-go
 
 ## 🛠️ Requisitos e Instalación
 
